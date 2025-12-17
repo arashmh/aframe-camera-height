@@ -35,48 +35,49 @@
     import "handy-controls";
 
     // --- Custom HUD Component ---
-    AFRAME.registerComponent('height-readout', {
-      init: function () {
-        this.camera = document.querySelector('#head');
-        this.rig = document.querySelector('#cameraRig');
-        this.displayText = this.el;
-        
-        // Allocate vectors once to avoid garbage collection issues
-        this.worldPos = new THREE.Vector3();
-        this.localPos = new THREE.Vector3();
-      },
-      tick: function () {
-        if (!this.camera || !this.rig) return;
+AFRAME.registerComponent('height-readout', {
+  init: function () {
+    this.camera = document.querySelector('#head');
+    this.rig = document.querySelector('#cameraRig');
+    this.displayText = this.el;
+    
+    this.worldPos = new THREE.Vector3();
+    this.localPos = new THREE.Vector3();
+  },
+  tick: function () {
+    if (!this.camera || !this.rig) return;
 
-        // 1. Get Global World Position (Where are you in the simulation?)
-        this.camera.object3D.getWorldPosition(this.worldPos);
+    // 1. Get Global World Position
+    this.camera.object3D.getWorldPosition(this.worldPos);
 
-        // 2. Get Local Position (Where are you physically inside the rig?)
-        // Since camera is a direct child of the rig, .position is local.
-        this.localPos.copy(this.camera.object3D.position);
+    // 2. CORRECT CALCULATION: Convert World Pos to Rig's Local Space
+    // We copy the world position first, then ask the Rig to convert that 
+    // global point into its own local coordinate system.
+    this.localPos.copy(this.worldPos);
+    this.rig.object3D.worldToLocal(this.localPos);
 
-        // 3. Calc Height relative to platform (Platform is at Y=10)
-        const relativeHeight = this.worldPos.y - 10.0;
+    // 3. Calc Height relative to platform (Platform is at Y=10)
+    // You can also use worldPos.y - 10, or simply use localPos.y if rig is at 10
+    const relativeHeight = this.worldPos.y - 10.0;
 
-        // Helper for formatting
-        const f = (n) => n.toFixed(3);
+    const f = (n) => n.toFixed(3);
 
-        const textOutput = 
-          `:: TELEMETRY DATA ::\n\n` +
-          `WORLD (Global)\n` + 
-          `X: ${f(this.worldPos.x)}  Y: ${f(this.worldPos.y)}  Z: ${f(this.worldPos.z)}\n\n` +
-          
-          `LOCAL (Physical/Rig)\n` + 
-          `X: ${f(this.localPos.x)}  Y: ${f(this.localPos.y)}  Z: ${f(this.localPos.z)}\n\n` +
-          
-          `PLATFORM RELATIVE\n` +
-          `Height: ${f(relativeHeight)}m`;
+    const textOutput = 
+      `:: TELEMETRY DATA ::\n\n` +
+      `WORLD (Global)\n` + 
+      `X: ${f(this.worldPos.x)}  Y: ${f(this.worldPos.y)}  Z: ${f(this.worldPos.z)}\n\n` +
+      
+      `LOCAL (Rig Relative)\n` + 
+      `X: ${f(this.localPos.x)}  Y: ${f(this.localPos.y)}  Z: ${f(this.localPos.z)}\n\n` +
+      
+      `PLATFORM RELATIVE\n` +
+      `Height: ${f(relativeHeight)}m`;
 
-        this.displayText.setAttribute('text', { value: textOutput });
-      }
-    });
+    this.displayText.setAttribute('text', { value: textOutput });
+  }
+});
 
-    console.log("Components registered. Starting A-Frame.");
+       console.log("Components registered. Starting A-Frame.");
     window.AFRAME.emitReady();
   </script>
 
@@ -115,7 +116,10 @@
     <!-- CAMERA RIG -->
     <a-entity id="cameraRig" position="0 10 0" movement-controls="enabled: true; speed: 0.2; camera:#head;">
       
-      <a-entity id="head" camera="active: true" look-controls position="0 1.6 0">
+    <!-- vertical variable height adjuster TODO-->
+     <a-entity id="camera-height-adjuster" position="0 0.5 0">
+
+        <a-entity id="head" camera="active: true" look-controls position="0 1.6 0">
         
         <!-- UPDATED HUD PANEL -->
         <!-- Placed slightly down (-0.05) and forward (-1.1) and tilted up (X: -15) -->
@@ -143,6 +147,8 @@
         </a-entity>
 
       </a-entity>
+
+     </a-entity>
 
       <a-entity id="hands" handy-controls="renderGamepad: any; materialOverride: both;" material="color: #FFDB58; metalness: 0.5; roughness: 0.3;"></a-entity>
     
