@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <title> ibi Ocean Dome </title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+
+
+  <script>
+    // 1. Tell A-Frame to wait for our manual signal before initializing
+    window.AFRAME_ASYNC = true;
+  </script>
+  <script type="importmap">
+      {
+        "imports": {
+          "aframe": "https://aframe.io/releases/1.7.0/aframe.module.min.js",
+          "three": "https://cdn.jsdelivr.net/npm/super-three@0.173.4/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/super-three@0.173.4/examples/jsm/",
+          "sphere-collider": "https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.5.4/dist/components/sphere-collider.min.js",
+          "aframe-extras-controls": "https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.5.4/dist/aframe-extras.controls.min.js",
+          "handy-controls": "https://cdn.jsdelivr.net/npm/handy-work/build/handy-controls.min.js",
+          
+        }
+      }
+    </script>
+
+  <!-- 
+    THE FIX: The "Shim"
+    We create the global 'Util' object that the physx script expects.
+    This must come BEFORE the module script that imports physx.
+  -->
+  <script>
+    window.Util = {};
+  </script>
+
+  <script type="module">
+    import "aframe";
+    import * as THREE from "three";
+   
+
+
+
+
+    import "sphere-collider";
+    import "aframe-extras-controls";
+    import "handy-controls";
+   
+
+
+
+    // --- Components are registered, now we can safely initialize A-Frame ---
+    console.log("Components registered. Starting A-Frame.");
+    window.AFRAME.emitReady();
+  </script>
+
+  
+
+  <!-- Scene is initially hidden -->
+  <a-scene 
+    background="color: #FAFAFA" style="display: none"
+vr-mode-ui="enabled: true">
+
+    
+
+
+    <!-- camera rig -->
+    <a-entity id="cameraRig" position="-21 1 2.6" movement-controls="enabled: true; speed:0.15;camera:#head;">
+      <a-entity id="head" camera="active: true" look-controls position="0 1.8 0">
+        
+      </a-entity>
+
+      <!-- Handy Controls with Add-Tips and Pose-Eval -->
+      <a-entity id="hands" handy-controls="
+          renderGamepad: any;
+          materialOverride: both;
+        " material="color: #FFDB58; metalness: 0.5; roughness: 0.3;">
+       
+
+     
+      </a-entity>
+    </a-entity>
+
+   
+
+
+   
+
+   
+
+  </a-scene>
+
+</body>
+
+</html>
