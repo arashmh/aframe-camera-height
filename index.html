@@ -71,12 +71,15 @@
       }
     });
 
-    // --- 2. Smart Height Adjuster (Your Request) ---
+    // --- 2. Smart Height Adjuster (Updated) ---
     AFRAME.registerComponent('smart-height-adjuster', {
       schema: {
         targetHeight: { type: 'number', default: 1.75 }, 
         threshold: { type: 'number', default: 1.55 },    
-        interval: { type: 'number', default: 5000 }      
+        interval: { type: 'number', default: 5000 },
+        
+        // New Param: Detection tolerance for being "Too High" (e.g. Standing up)
+        sitting_to_standing_threshold_for_readjustment: { type: 'number', default: 0.4 }
       },
 
       init: function () {
@@ -84,12 +87,12 @@
         this.camera = this.el.querySelector('[camera]');
         
         this.timer = 0;
-        this.isActive = false; // Only active in VR
+        this.isActive = false;
 
         // Listen for VR entry
         this.el.sceneEl.addEventListener('enter-vr', () => {
           this.isActive = true;
-          // Initial check after 1 second to let sensors stabilize
+          // Initial check after 1 second
           setTimeout(() => { this.checkHeight(); }, 1000); 
         });
 
@@ -112,19 +115,37 @@
       checkHeight: function () {
         // Current Adjuster Offset
         const currentAdjusterY = this.adjuster.object3D.position.y;
-        // Physical Camera Height (from headset)
+        // Physical Camera Height (from headset sensors)
         const currentCameraY = this.camera.object3D.position.y;
 
         // Total Height relative to Rig Floor
         const totalHeightWRT_Rig = currentAdjusterY + currentCameraY;
 
-        // Logic: Only boost UP if below threshold
+        console.log(`Height Check: ${totalHeightWRT_Rig.toFixed(2)}m`);
+
+        // --- CASE A: USER IS SITTING (Too Low) ---
         if (totalHeightWRT_Rig < this.data.threshold) {
-          // Calculate needed boost
+          console.log(">> User is Sitting. Boosting UP.");
+          
           const difference = this.data.targetHeight - totalHeightWRT_Rig;
           const newAdjusterY = currentAdjusterY + difference;
           
           this.adjuster.object3D.position.y = newAdjusterY;
+        }
+
+        // --- CASE B: USER STOOD UP (Too High) ---
+        // Logic: If current height exceeds (Target + Threshold), we are too high.
+        // Example: Target 1.75 + 0.4 = 2.15 max. If we are at 2.45, we need to go down.
+        const maxAllowedHeight = this.data.targetHeight + this.data.sitting_to_standing_threshold_for_readjustment;
+
+        if (totalHeightWRT_Rig > maxAllowedHeight) {
+           console.log(">> User Stood Up (Too High). Adjusting DOWN.");
+
+           // We calculate how much we need to drop to get back to targetHeight
+           const difference = totalHeightWRT_Rig - this.data.targetHeight;
+           const newAdjusterY = currentAdjusterY - difference;
+
+           this.adjuster.object3D.position.y = newAdjusterY;
         }
       }
     });
@@ -165,40 +186,43 @@
     </a-entity>
 
     <!-- CAMERA RIG -->
-    <!-- Added: smart-height-adjuster component -->
+    <!-- Added: sitting_to_standing_threshold_for_readjustment -->
     <a-entity id="cameraRig" 
               position="0 10 0" 
               movement-controls="enabled: true; speed: 0.2; camera:#head;"
-              smart-height-adjuster="targetHeight: 1.75; threshold: 1.55; interval: 5000">
+              smart-height-adjuster="
+                 targetHeight: 1.75; 
+                 threshold: 1.55; 
+                 interval: 5000;
+                 sitting_to_standing_threshold_for_readjustment: 0.4">
       
      <!-- vertical variable height adjuster -->
      <a-entity id="camera-height-adjuster" position="0 0.5 0">
 
+        <!-- HEAD -->
         <a-entity id="head" camera="active: true" look-controls position="0 1.6 0">
-        
-        <!-- HUD PANEL -->
-        <a-entity position="0 -0.05 -1.1" rotation="-15 0 0">
-            <a-box width="0.9" height="0.5" depth="0.01" 
-                   material="color: #000; opacity: 0.7; transparent: true; metalness: 0.8; roughness: 0.2"
-                   position="0 0 0">
-                   <a-entity geometry="primitive: plane; width: 0.92; height: 0.52" position="0 0 -0.01" material="color: #00d9ff; shader: flat"></a-entity>
-            </a-box>
-
-            <a-text height-readout 
-                    value="Init..." 
-                    font="monoid"
-                    align="center" 
-                    width="1.6" 
-                    color="#00ffcc"
-                    position="0 0 0.02">
-            </a-text>
+            <!-- HUD PANEL -->
+            <a-entity position="0 -0.05 -1.1" rotation="-15 0 0">
+                <a-box width="0.9" height="0.5" depth="0.01" 
+                    material="color: #000; opacity: 0.7; transparent: true; metalness: 0.8; roughness: 0.2"
+                    position="0 0 0">
+                    <a-entity geometry="primitive: plane; width: 0.92; height: 0.52" position="0 0 -0.01" material="color: #00d9ff; shader: flat"></a-entity>
+                </a-box>
+                <a-text height-readout 
+                        value="Init..." 
+                        font="monoid"
+                        align="center" 
+                        width="1.6" 
+                        color="#00ffcc"
+                        position="0 0 0.02">
+                </a-text>
+            </a-entity>
         </a-entity>
 
-      </a-entity>
+        <!-- HANDS (Moved inside adjuster so they move with the height fix) -->
+        <a-entity id="hands" handy-controls="renderGamepad: any; materialOverride: both;" material="color: #FFDB58; metalness: 0.5; roughness: 0.3;"></a-entity>
 
      </a-entity>
-
-      <a-entity id="hands" handy-controls="renderGamepad: any; materialOverride: both;" material="color: #FFDB58; metalness: 0.5; roughness: 0.3;"></a-entity>
     
     </a-entity>
 
