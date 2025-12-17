@@ -2,7 +2,7 @@
 <html>
 
 <head>
-  <title> ibi Ocean Dome - Height Test </title>
+  <title> ibi Ocean Dome - Smart Height </title>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
@@ -34,50 +34,101 @@
     import "aframe-extras-controls";
     import "handy-controls";
 
-    // --- Custom HUD Component ---
-AFRAME.registerComponent('height-readout', {
-  init: function () {
-    this.camera = document.querySelector('#head');
-    this.rig = document.querySelector('#cameraRig');
-    this.displayText = this.el;
-    
-    this.worldPos = new THREE.Vector3();
-    this.localPos = new THREE.Vector3();
-  },
-  tick: function () {
-    if (!this.camera || !this.rig) return;
+    // --- 1. Custom HUD Component ---
+    AFRAME.registerComponent('height-readout', {
+      init: function () {
+        this.camera = document.querySelector('#head');
+        this.rig = document.querySelector('#cameraRig');
+        this.adjuster = document.querySelector('#camera-height-adjuster');
+        this.displayText = this.el;
+        
+        this.worldPos = new THREE.Vector3();
+        this.localPos = new THREE.Vector3();
+      },
+      tick: function () {
+        if (!this.camera || !this.rig) return;
 
-    // 1. Get Global World Position
-    this.camera.object3D.getWorldPosition(this.worldPos);
+        // Global
+        this.camera.object3D.getWorldPosition(this.worldPos);
+        
+        // Rig Relative
+        this.localPos.copy(this.worldPos);
+        this.rig.object3D.worldToLocal(this.localPos);
 
-    // 2. CORRECT CALCULATION: Convert World Pos to Rig's Local Space
-    // We copy the world position first, then ask the Rig to convert that 
-    // global point into its own local coordinate system.
-    this.localPos.copy(this.worldPos);
-    this.rig.object3D.worldToLocal(this.localPos);
+        const relativeHeight = this.worldPos.y - 10.0;
+        const adjusterHeight = this.adjuster ? this.adjuster.object3D.position.y : 0;
 
-    // 3. Calc Height relative to platform (Platform is at Y=10)
-    // You can also use worldPos.y - 10, or simply use localPos.y if rig is at 10
-    const relativeHeight = this.worldPos.y - 10.0;
+        const f = (n) => n.toFixed(2);
 
-    const f = (n) => n.toFixed(3);
+        const textOutput = 
+          `:: TELEMETRY ::\n` +
+          `Global Y: ${f(this.worldPos.y)}\n` +
+          `Rig Rel Y: ${f(this.localPos.y)}\n` + 
+          `Adj Offset: ${f(adjusterHeight)}\n` +
+          `Target: 1.75m`;
 
-    const textOutput = 
-      `:: TELEMETRY DATA ::\n\n` +
-      `WORLD (Global)\n` + 
-      `X: ${f(this.worldPos.x)}  Y: ${f(this.worldPos.y)}  Z: ${f(this.worldPos.z)}\n\n` +
-      
-      `LOCAL (Rig Relative)\n` + 
-      `X: ${f(this.localPos.x)}  Y: ${f(this.localPos.y)}  Z: ${f(this.localPos.z)}\n\n` +
-      
-      `PLATFORM RELATIVE\n` +
-      `Height: ${f(relativeHeight)}m`;
+        this.displayText.setAttribute('text', { value: textOutput });
+      }
+    });
 
-    this.displayText.setAttribute('text', { value: textOutput });
-  }
-});
+    // --- 2. Smart Height Adjuster (Your Request) ---
+    AFRAME.registerComponent('smart-height-adjuster', {
+      schema: {
+        targetHeight: { type: 'number', default: 1.75 }, 
+        threshold: { type: 'number', default: 1.55 },    
+        interval: { type: 'number', default: 5000 }      
+      },
 
-       console.log("Components registered. Starting A-Frame.");
+      init: function () {
+        this.adjuster = this.el.querySelector('#camera-height-adjuster');
+        this.camera = this.el.querySelector('[camera]');
+        
+        this.timer = 0;
+        this.isActive = false; // Only active in VR
+
+        // Listen for VR entry
+        this.el.sceneEl.addEventListener('enter-vr', () => {
+          this.isActive = true;
+          // Initial check after 1 second to let sensors stabilize
+          setTimeout(() => { this.checkHeight(); }, 1000); 
+        });
+
+        this.el.sceneEl.addEventListener('exit-vr', () => {
+          this.isActive = false;
+        });
+      },
+
+      tick: function (time, timeDelta) {
+        if (!this.isActive || !this.adjuster || !this.camera) return;
+
+        this.timer += timeDelta;
+
+        if (this.timer >= this.data.interval) {
+          this.checkHeight();
+          this.timer = 0;
+        }
+      },
+
+      checkHeight: function () {
+        // Current Adjuster Offset
+        const currentAdjusterY = this.adjuster.object3D.position.y;
+        // Physical Camera Height (from headset)
+        const currentCameraY = this.camera.object3D.position.y;
+
+        // Total Height relative to Rig Floor
+        const totalHeightWRT_Rig = currentAdjusterY + currentCameraY;
+
+        // Logic: Only boost UP if below threshold
+        if (totalHeightWRT_Rig < this.data.threshold) {
+          // Calculate needed boost
+          const difference = this.data.targetHeight - totalHeightWRT_Rig;
+          const newAdjusterY = currentAdjusterY + difference;
+          
+          this.adjuster.object3D.position.y = newAdjusterY;
+        }
+      }
+    });
+
     window.AFRAME.emitReady();
   </script>
 
@@ -105,45 +156,42 @@ AFRAME.registerComponent('height-readout', {
       <a-cylinder height="3" radius="0.05" position="0 1.5 0" material="color: #333"></a-cylinder>
       <a-entity position="0 0.05 0" mixin="marker-line"></a-entity>
       <a-text value="0.0m (Floor)" position="0.6 0.05 0" color="#ff0055" width="4"></a-text>
-      <a-entity position="0 1.0 0" mixin="marker-line"></a-entity>
-      <a-text value="1.0m" position="0.6 1.0 0" mixin="marker-text"></a-text>
-      <a-entity position="0 1.6 0" mixin="marker-line" material="color: #ffcc00; emissive: #ffcc00"></a-entity>
-      <a-text value="1.6m (Eye)" position="0.6 1.6 0" color="#ffcc00" width="4"></a-text>
-      <a-entity position="0 2.0 0" mixin="marker-line"></a-entity>
-      <a-text value="2.0m" position="0.6 2.0 0" mixin="marker-text"></a-text>
+      
+      <a-entity position="0 1.55 0" mixin="marker-line" material="color: red"></a-entity>
+      <a-text value="1.55m (Sit Threshold)" position="0.6 1.55 0" color="red" width="4"></a-text>
+
+      <a-entity position="0 1.75 0" mixin="marker-line" material="color: #00ff00"></a-entity>
+      <a-text value="1.75m (Stand Target)" position="0.6 1.75 0" color="#00ff00" width="4"></a-text>
     </a-entity>
 
     <!-- CAMERA RIG -->
-    <a-entity id="cameraRig" position="0 10 0" movement-controls="enabled: true; speed: 0.2; camera:#head;">
+    <!-- Added: smart-height-adjuster component -->
+    <a-entity id="cameraRig" 
+              position="0 10 0" 
+              movement-controls="enabled: true; speed: 0.2; camera:#head;"
+              smart-height-adjuster="targetHeight: 1.75; threshold: 1.55; interval: 5000">
       
-    <!-- vertical variable height adjuster TODO-->
+     <!-- vertical variable height adjuster -->
      <a-entity id="camera-height-adjuster" position="0 0.5 0">
 
         <a-entity id="head" camera="active: true" look-controls position="0 1.6 0">
         
-        <!-- UPDATED HUD PANEL -->
-        <!-- Placed slightly down (-0.05) and forward (-1.1) and tilted up (X: -15) -->
+        <!-- HUD PANEL -->
         <a-entity position="0 -0.05 -1.1" rotation="-15 0 0">
-            
-            <!-- Glass Background Panel -->
             <a-box width="0.9" height="0.5" depth="0.01" 
                    material="color: #000; opacity: 0.7; transparent: true; metalness: 0.8; roughness: 0.2"
                    position="0 0 0">
-                   <!-- Glow Border -->
                    <a-entity geometry="primitive: plane; width: 0.92; height: 0.52" position="0 0 -0.01" material="color: #00d9ff; shader: flat"></a-entity>
             </a-box>
 
-            <!-- Text Data -->
-            <!-- font: monoid is excellent for aligning numbers -->
             <a-text height-readout 
-                    value="Initializing..." 
+                    value="Init..." 
                     font="monoid"
                     align="center" 
                     width="1.6" 
                     color="#00ffcc"
                     position="0 0 0.02">
             </a-text>
-
         </a-entity>
 
       </a-entity>
